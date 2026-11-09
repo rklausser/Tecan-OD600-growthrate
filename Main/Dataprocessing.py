@@ -8,9 +8,10 @@ from scipy.signal import savgol_filter
 # file import
 # --------------------------
 
-data_df = pd.read_parquet("Temp/tecan_import_data_df.parquet")
-metadata_df = pd.read_parquet("Temp/tecan_import_meta_df.parquet")
+data_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_data_df.parquet")
+metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
 
+well_assignment_path = r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Well_assignment\assignment_sheet.xlsx"
 
 # --------------------------
 # identify time column
@@ -55,154 +56,28 @@ if missing_wells:
     )
 
 # ---------------------------------------------------------
-# Well assignment
+# well assignment
 # ---------------------------------------------------------
 
+#read well assignment sheet
+meta = pd.read_excel(well_assignment_path)
+
+#check if required information is existing
+required = ["well", "condition", "replicate"]
+missing = [c for c in required if c not in meta.columns]
+if missing:
+    raise ValueError(f"Missing required columns: {missing}")
+
+#make sure that replicates are integers
+meta["replicate"] = meta["replicate"].astype(int)
+
 well_assignments = {
-    "A1": {
-        "condition": "Control 0.1",
-        "replicate": 1,
-        "imidazole (g/L)": 0,
-        "start OD": 0.1,
-    },
-    "A2": {
-        "condition": "Control 0.1",
-        "replicate": 2,
-        "imidazole (g/L)": 0,
-        "start OD": 0.1,
-    },
-    "A3": {
-        "condition": "Control 0.1",
-        "replicate": 3,
-        "imidazole (g/L)": 0,
-        "start OD": 0.1,
-    },
-    "A4": {
-        "condition": "Control 0.2",
-        "replicate": 1,
-        "imidazole (g/L)": 0,
-        "start OD": 0.2,
-    },
-    "A5": {
-        "condition": "Control 0.2",
-        "replicate": 2,
-        "imidazole (g/L)": 0,
-        "start OD": 0.2,
-    },
-    "A6": {
-        "condition": "Control 0.2",
-        "replicate": 3,
-        "imidazole (g/L)": 0,
-        "start OD": 0.2,
-    },
-    "B1": {
-        "condition": "I 0.5, OD 0.1",
-        "replicate": 1,
-        "imidazole (g/L)": 0.5,
-        "start OD": 0.1,
-    },
-    "B2": {
-        "condition": "I 0.5, OD 0.1",
-        "replicate": 2,
-        "imidazole (g/L)": 0.5,
-        "start OD": 0.1,
-    },
-    "B3": {
-        "condition": "I 0.5, OD 0.1",
-        "replicate": 3,
-        "imidazole (g/L)": 0.5,
-        "start OD": 0.1,
-    },
-    "B4": {
-        "condition": "I 1.0, OD 0.2",
-        "replicate": 1,
-        "imidazole (g/L)": 1,
-        "start OD": 0.2,
-    },
-    "B5": {
-        "condition": "I 1.0, OD 0.2",
-        "replicate": 2,
-        "imidazole (g/L)": 1,
-        "start OD": 0.2,
-    },
-    "B6": {
-        "condition": "I 1.0, OD 0.2",
-        "replicate": 3,
-        "imidazole (g/L)": 1,
-        "start OD": 0.2,
-    },
-    "C1": {
-        "condition": "I 1.0, OD 0.1",
-        "replicate": 1,
-        "imidazole (g/L)": 1,
-        "start OD": 0.1,
-    },
-    "C2": {
-        "condition": "I 1.0, OD 0.1",
-        "replicate": 2,
-        "imidazole (g/L)": 1,
-        "start OD": 0.1,
-    },
-    "C3": {
-        "condition": "I 1.0, OD 0.1",
-        "replicate": 3,
-        "imidazole (g/L)": 1,
-        "start OD": 0.1,
-    },
-    "C4": {
-        "condition": "Control 0.5",
-        "replicate": 1,
-        "imidazole (g/L)": 0,
-        "start OD": 0.5,
-    },
-    "C5": {
-        "condition": "Control 0.5",
-        "replicate": 2,
-        "imidazole (g/L)": 0,
-        "start OD": 0.5,
-    },
-    "C6": {
-        "condition": "Control 0.5",
-        "replicate": 3,
-        "imidazole (g/L)": 0,
-        "start OD": 0.5,
-    },
-    "D1": {
-        "condition": "I 1.5, OD 0.1",
-        "replicate": 1,
-        "imidazole (g/L)": 1.5,
-        "start OD": 0.1,
-    },
-    "D2": {
-        "condition": "I 1.5, OD 0.1",
-        "replicate": 2,
-        "imidazole (g/L)": 1.5,
-        "start OD": 0.1,
-    },
-    "D3": {
-        "condition": "I 1.5, OD 0.1",
-        "replicate": 3,
-        "imidazole (g/L)": 1.5,
-        "start OD": 0.1,
-    },
-    "D4": {
-        "condition": "I 1.0, OD 0.5",
-        "replicate": 1,
-        "imidazole (g/L)": 1,
-        "start OD": 0.5,
-    },
-    "D5": {
-        "condition": "I 1.0, OD 0.5",
-        "replicate": 2,
-        "imidazole (g/L)": 1,
-        "start OD": 0.5,
-    },
-    "D6": {
-        "condition": "I 1.0, OD 0.5",
-        "replicate": 3,
-        "imidazole (g/L)": 1,
-        "start OD": 0.5,
+    row["well"]: {
+        col: row[col]
+        for col in meta.columns
+        if col != "well"
     }
+    for _, row in meta.iterrows()
 }
 
 def validate_assignments(data_df, well_assignments):
@@ -246,12 +121,12 @@ def validate_assignments(data_df, well_assignments):
 
         if "condition" not in assignment:
             raise ValueError(
-                f"Well {well} has no condition assigned."
+                f"well {well} has no condition assigned."
             )
 
         if "replicate" not in assignment:
             raise ValueError(
-                f"Well {well} has no replicate number."
+                f"well {well} has no replicate number."
             )
 
     # -----------------------------------------------------
@@ -279,7 +154,7 @@ def validate_assignments(data_df, well_assignments):
                 f"'{condition}': {replicates}"
             )
 
-    print("Well assignments validated successfully.")
+    print("well assignments validated successfully.")
 
 
 # ---------------------------------------------------------
@@ -315,7 +190,7 @@ def assign_conditions(data_df, well_assignments):
     long_df = data_df.melt(
         id_vars=["Cycle Nr.", time_column],
         value_vars=well_columns,
-        var_name="Well",
+        var_name="well",
         value_name="Y Data"
     )
 
@@ -325,14 +200,14 @@ def assign_conditions(data_df, well_assignments):
         orient="index"
     )
 
-    assignment_df.index.name = "Well"
+    assignment_df.index.name = "well"
 
     assignment_df = assignment_df.reset_index()
 
     # Merge assignments onto the measurement data
     long_df = long_df.merge(
         assignment_df,
-        on="Well",
+        on="well",
         how="left"
     )
 
@@ -341,7 +216,7 @@ def assign_conditions(data_df, well_assignments):
 
 long_df = assign_conditions(data_df, well_assignments)
 # print(long_df) #optional diagnostic
-long_df.to_parquet("Temp/long_df.parquet") # save data to parquet
+long_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\long_df.parquet") # save data to parquet
 
 
 # ---------------------------------------------------------
@@ -378,7 +253,7 @@ def remove_spikes(long_df, window=5, threshold=2):
 
     filtered_df["rolling_median"] = (
         filtered_df
-        .groupby("Well")["Y Data"]
+        .groupby("well")["Y Data"]
         .transform(
             lambda x: x.rolling( #Note: lambda are "anonymous function" to be used once and never called again
                 window=window,
@@ -403,7 +278,7 @@ def remove_spikes(long_df, window=5, threshold=2):
 
     filtered_df["rolling_mad"] = (
         filtered_df
-        .groupby("Well")["absolute_deviation"]
+        .groupby("well")["absolute_deviation"]
         .transform(
             lambda x: x.rolling(
                 window=window,
@@ -451,7 +326,7 @@ filtered_df = remove_spikes(
     window=20,
     threshold=2
 )
-filtered_df.to_parquet("Temp/filtered_df.parquet") # save data to parquet
+filtered_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\filtered_df.parquet") # save data to parquet
 
 # --------------------------
 # Define Smoothing function (Savitzki-Golay)
@@ -475,13 +350,11 @@ def smooth_with_savgol(group, window_length=11, polyorder=2):
 
 smoothed_df = (
     filtered_df
-    .groupby("Well", group_keys=True)
+    .groupby("well", group_keys=False)
     .apply(smooth_with_savgol)
-    .reset_index()
-    .drop(columns="level_1")
 )
 
-smoothed_df.to_parquet("Temp/smoothed_df.parquet") # save smoothed df
+smoothed_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\smoothed_df.parquet") # save smoothed df
 
 def calculate_growthrate(group):
     """
@@ -517,13 +390,8 @@ def calculate_growthrate(group):
 
 mu_df = (
     smoothed_df
-    .groupby(
-        ["Well"],
-        group_keys=True
-    )
+    .groupby(["well"], group_keys=False)
     .apply(calculate_growthrate)
-    .reset_index()
-    .drop(columns=["level_1"])
 )
 
 # Optional diagnostics
@@ -540,15 +408,23 @@ def calculate_summary(mu_df, OD_column, mu_column):
     Calculate mean, standard deviation, number of replicates,
     and standard error for each condition and time point.
     """
+    parameter_columns = sorted({
+        key
+        for assignment in well_assignments.values()
+        for key in assignment
+        if key != "replicate"
+    })
+
+    #only keep columns that are present in mu_df as a safety check
+    parameter_columns = [c for c in parameter_columns if c in mu_df.columns]
 
     summary_df = (
         mu_df
-        .groupby(["Time [s]", "condition", "imidazole (g/L)", "start OD"])
+        .groupby(["Time [s]"] + parameter_columns)
         .agg(
             OD_mean=(OD_column,"mean"),
             OD_std=(OD_column, "std"),
             n=(OD_column, "count"),
-
             mu_mean=(mu_column,"mean"),
             mu_std=(mu_column,"std"),
         )
@@ -579,5 +455,5 @@ def calculate_summary(mu_df, OD_column, mu_column):
     return summary_df
 
 summary_df = calculate_summary(mu_df, OD_column = "Y Data smoothed", mu_column = "mu")
-#print(summary_df.head()) #optional diagnostic
-summary_df.to_parquet("Temp/summary_df.parquet")
+print(summary_df.head()) #optional diagnostic
+summary_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\summary_df.parquet")

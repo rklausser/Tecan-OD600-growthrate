@@ -3,7 +3,7 @@ import pandas as pd
 from pathlib import Path
 
 #define import directory
-directory = Path(r"C:\Users\rklausser\PyCharmMiscProject\Pseudomonas\Pseudomonas_Tecan_local\Test_Dataset\tecan_excel_files")
+directory = Path(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Test_Dataset")
 
 #import meta-data function
 def read_tecan(filepath, sheet_name="Result sheet"):
@@ -215,6 +215,6 @@ data_df, metadata_df = concatenate_tecan_files(
 print(data_df.to_string(index=False))
 print(metadata_df.to_string(index=False))
 
-data_df.to_parquet("Temp/tecan_import_data_df.parquet") # save data to parquet
-metadata_df.to_parquet("Temp/tecan_import_meta_df.parquet") # save metadata to parquet
+data_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_data_df.parquet") # save data to parquet
+metadata_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_meta_df.parquet") # save metadata to parquet
 

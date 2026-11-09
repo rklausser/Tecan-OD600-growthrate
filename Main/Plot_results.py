@@ -6,8 +6,8 @@ import matplotlib.lines as mlines
 # file import
 # --------------------------
 
-summary_df = pd.read_parquet("Temp/summary_df.parquet")
-metadata_df = pd.read_parquet("Temp/tecan_import_meta_df.parquet")
+summary_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\summary_df.parquet")
+metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
 
 # --------------------------
 # Plot settings
@@ -17,24 +17,28 @@ metadata_df = pd.read_parquet("Temp/tecan_import_meta_df.parquet")
 
 imidazol_plot = [0, 0.5, 1, 1.5]
 OD_plot = [0.1, 0.2, 0.5]
+dummy_plot = [4]
 
 # Dictionaries to define which parameters should be styled in which way
-imi_linestyle_dict = {
+linestyle_dict = {
     0: '-',
     0.5: '--',
     1: '-.',
     1.5: ':'
 }
-OD_color_dict = {
+
+color_dict = {
     0.1: '#1a85ff',
     0.2: '#a7b500',
     0.5: '#d41159'
 }
 
+print(summary_df)
 
 plot_subset = summary_df[
         (summary_df["imidazole (g/L)"].isin(imidazol_plot)) &
-        (summary_df["start OD"].isin(OD_plot))
+        (summary_df["start OD"].isin(OD_plot)) &
+        (summary_df["dummy_parameter"].isin(dummy_plot))
     ]
 
 
@@ -53,6 +57,7 @@ def plot_OD(plot_subset):
 
         imidazole_conc = plot_subset.loc[plot_subset["condition"] == condition, "imidazole (g/L)"].to_numpy()[0]
         OD600_value = plot_subset.loc[plot_subset["condition"] == condition, "start OD"].to_numpy()[0]
+        dummy_value = plot_subset.loc[plot_subset["condition"] == condition, "dummy_parameter"].to_numpy()[0]
 
         condition_data = plot_subset[
             plot_subset["condition"] == condition
@@ -150,8 +155,8 @@ def plot_OD(plot_subset):
 
     plt.tight_layout()
 
-    plt.savefig("Plots/OD.svg", transparent=True, format="svg")
-    plt.savefig("Plots/OD.png", transparent=None, format="png", dpi=600)
+    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\OD.svg", transparent=True, format="svg")
+    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\OD.png", transparent=None, format="png", dpi=600)
     plt.show()
 
 
@@ -266,8 +271,8 @@ def plot_mu(plot_subset):
 
     plt.tight_layout()
 
-    plt.savefig("Plots/mu.svg", transparent=True, format="svg")
-    plt.savefig("Plots/mu.png", transparent=None, format="png", dpi=600)
+    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\mu.svg", transparent=True, format="svg")
+    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\mu.png", transparent=None, format="png", dpi=600)
     plt.show()
 
 
