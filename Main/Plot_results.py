@@ -1,280 +1,163 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+from dataclasses import dataclass, field
+from itertools import product
+from math import ceil
+from pathlib import Path
 
 # --------------------------
 # file import
 # --------------------------
 
 summary_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\summary_df.parquet")
-metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
 
-# --------------------------
-# Plot settings
-# --------------------------
+#Metadata import is not used at the moment. Can be reactivated later
+#metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
 
-# Select conditions to plot
 
-imidazol_plot = [0, 0.5, 1, 1.5]
-OD_plot = [0.1, 0.2, 0.5]
-dummy_plot = [4]
+# Dictionaries to define standard lists for lines and colors
 
-# Dictionaries to define which parameters should be styled in which way
-linestyle_dict = {
-    0: '-',
-    0.5: '--',
-    1: '-.',
-    1.5: ':'
-}
+LINESTYLES = ['-', '--', '-.', ':']
 
-color_dict = {
-    0.1: '#1a85ff',
-    0.2: '#a7b500',
-    0.5: '#d41159'
-}
+COLOR_BASE = ['#332288','#117733','#44aa99', "#88ccee",
+              "#ddcc77", "#cc6677", "#aa4499", "#882255"]
 
-print(summary_df)
+BASE = Path(__file__).resolve().parent
 
-plot_subset = summary_df[
-        (summary_df["imidazole (g/L)"].isin(imidazol_plot)) &
-        (summary_df["start OD"].isin(OD_plot)) &
-        (summary_df["dummy_parameter"].isin(dummy_plot))
-    ]
+# ---------------------------------------------------------
+# Config definition
+# ---------------------------------------------------------
+
+@dataclass
+class PlotConfig:
+    color_var: str | None = None       # tickbox choice 1, what is displayed as color?
+    color_order: list[str] = field(default_factory=lambda: COLOR_BASE[:])
+    style_var: str | None = None   # tickbox choice 2, what is displayed as linestyles?
+    style_order: list[str] = field(default_factory=lambda: LINESTYLES[:])
+    facet_vars: list[str] = field(default_factory=list)  # any remaining params will be shown as facets
+    y_mean: str = "OD_mean"     # unspecific definition of the y-data so one function can plot both OD and mu
+    y_se: str = "OD_se"         # unspecific definition of the y-data so one function can plot both OD and mu
+    ylabel: str = "OD600"       # unspecific definition of the y-data so one function can plot both OD and mu
+    ncol: int = 3               # sets max. columns of the panel before they wrap
+    filters: dict[str, list] = field(default_factory=dict) # empty produced no filter
+    
 
 
 # ---------------------------------------------------------
-# Plot
+# Helper function definitions
 # ---------------------------------------------------------
 
-def plot_OD(plot_subset):
-    """
-    Plot mean ± standard error for each condition.
-    """
+METRIC_COLUMNS = {"OD_mean", "OD_std", "n", "mu_mean", "mu_std", "OD_se", "OD_ci", "mu_se", "mu_ci"} # all the metrics calculated by Dataprocessing.py
 
-    fig = plt.figure(figsize=(10, 6))
+def parameter_columns(df):
+    """returns all parameter columns that are selectable for plotting"""
+    return [c for c in df.columns
+            if c not in METRIC_COLUMNS and "Time" not in str(c)]
 
-    for condition in plot_subset["condition"].unique():
+def unique(df, var):
+    return sorted(pd.unique(df[var].dropna())) # sorts all entries for a parameter column to return the full sorted range of parameter values as a tuple
 
-        imidazole_conc = plot_subset.loc[plot_subset["condition"] == condition, "imidazole (g/L)"].to_numpy()[0]
-        OD600_value = plot_subset.loc[plot_subset["condition"] == condition, "start OD"].to_numpy()[0]
-        dummy_value = plot_subset.loc[plot_subset["condition"] == condition, "dummy_parameter"].to_numpy()[0]
+def style_map(df, cfg):
+    vals = unique(df, cfg.style_var)
+    return {v: cfg.style_order[i % len(cfg.style_order)] for i, v in enumerate(vals)} # returns the linestyle order for the specific parameter values in each plot
 
-        condition_data = plot_subset[
-            plot_subset["condition"] == condition
-        ].sort_values("Time [s]")
+def color_map(df, cfg):
+    vals = unique(df, cfg.color_var)
+    return {v: cfg.color_order[i % len(cfg.color_order)] for i, v in enumerate(vals)} # returns the color order for the specific parameter values in each plot
 
-        condition_data = condition_data.dropna(
-            subset=["Time [s]", "OD_mean", "OD_ci"]
-        )
+def facet_combos(df, vars_):
+    if not vars_:
+        return[()]
+    return list(product(*[unique(df, v) for v in vars_])) # creates the Cartesian product of all parameter value combinations in vars_
 
-        if len(condition_data) == 0:
-            continue
+def default_config(df, y_mean="OD_mean", y_se="OD_se", ylabel="OD600", **kwargs):
+    params = parameter_columns(df)
+    cfg = PlotConfig(y_mean=y_mean, y_se=y_se, ylabel=ylabel, **kwargs)
+    if params:
+        cfg.color_var = params[0]
+    if len(params) > 1:
+        cfg.style_var = params[1]
+    return cfg
 
-        time =  pd.to_numeric(condition_data["Time [s]"], errors="coerce") / 3600
-        mean = pd.to_numeric(condition_data["OD_mean"], errors="coerce")
-        se = pd.to_numeric(condition_data["OD_se"], errors="coerce").fillna(0)
-
-        plt.plot(
-            time,
-            mean,
-            linestyle=imi_linestyle_dict[imidazole_conc],
-            linewidth=3,
-            color=OD_color_dict[OD600_value],
-            label=condition,
-        )
-
-        plt.fill_between(
-            time,
-            mean - se,
-            mean + se,
-            color=OD_color_dict[OD600_value],
-            alpha=0.2
-        )
+def apply_filters(df, filters):
+    for col, vals in filters.items():
+        df = df[df[col].isin(vals)]
+    return df
 
 
+    
 
-    processed_files = []
-    for item in metadata_df["Filename"].unique():
-        processed_files.append(item)
-        processed_files.append("\n")
-    titlestring = ''.join(processed_files)
+# ---------------------------------------------------------
+# Plotting the selected y data based on the selected config
+# ---------------------------------------------------------
 
+def plot_mean_metric(df, cfg):
+    df = apply_filters(df, cfg.filters) # filters the data for selected parameter ranges
+    style = style_map(df, cfg) # takes parameter to be line-styled from config
+    color = color_map(df, cfg) # takes parameter to be color-styled from config
+    combos = facet_combos(df, cfg.facet_vars) # takes list of remaining params that was shown in the config
+    
+    if combos:
+        ncol = max(1, min(len(combos), cfg.ncol)) # is at least 1 so /0 divisions are avoided
+        nrow = ceil(len(combos) / ncol)
+    else:
+        ncol, nrow = 1, 1 # when nothing is in combos, there is no need to wrap so it becomes a single panel
+        # Note: Input fields are tricky in terms of safety, so ncol should be selected in the config via a spinner or something like that
 
+    fig, axes = plt.subplots(nrow, ncol, squeeze=False, figsize=(10, 6))
+    axes = axes.ravel()
 
-    plt.xlabel("Time [h]")
-    plt.ylabel("OD600")
-    plt.title(f"Processed files: \n {titlestring}") #storing data complicates the falename issue
+    # Filter the data for each panel of the facets, only lets values for the respective variables through
+    for ax, combo in zip(axes, combos):
+        panel = df
+        for var, val in zip(cfg.facet_vars, combo):
+            panel = panel[panel[var] == val]
 
-    color_handles = [mlines.Line2D(
-        [],
-        [],
-        color=OD_color_dict[OD600_value],
-        label=f"start OD600 = {OD600_value}",
-        linestyle="-"
-    )
-    for OD600_value in OD_plot]
+        for sval in unique(panel, cfg.style_var):
+            for cval in unique(panel, cfg.color_var):
+                sub = panel[(panel[cfg.style_var] == sval) & (panel[cfg.color_var] == cval)]
+                sub = sub.dropna(subset=[cfg.y_mean]).sort_values("Time [s]")
+                if sub.empty:
+                    continue
+                t = pd.to_numeric(sub["Time [s]"], errors="coerce") / 3600
+                y = pd.to_numeric(sub[cfg.y_mean], errors="coerce")
+                se = pd.to_numeric(sub[cfg.y_se], errors="coerce").fillna(0)
 
-    line_handles = [mlines.Line2D(
-        [],
-        [],
-        color="grey",
-        label=f"imidazole [g/L] = {imidazole_conc}",
-        linestyle=imi_linestyle_dict[imidazole_conc],
-    )
-    for imidazole_conc in imidazol_plot]
+                ax.plot(t, y, linestyle=style[sval], linewidth=3, color=color[cval])
+                ax.fill_between(t, y - se, y + se, color=color[cval], alpha=0.2)
 
-    Legend_1 = plt.legend(
-        handles=color_handles,
-        title="Colors",
-        ncol=1,
-        loc="upper left",
-        bbox_to_anchor=(0.02, 0.95),
-    )
-    plt.gca().add_artist(Legend_1)
+                ax.set_xlabel("Time [h]"); ax.set_ylabel(cfg.ylabel); ax.grid(True)
 
-    # Force Matplotlib to calc. dimensions of the Leend
-    fig.canvas.draw()
+# Generate the legend handles - this might need some more work?
 
-    #Get width of Legend_1 in coordinates of the figure
-    bbox = Legend_1.get_window_extent()
-    bbox = bbox.transformed(fig.transFigure.inverted())
+    color_handles = [mlines.Line2D([], [], color=c, label=f"{cfg.color_var} = {v}", linestyle="-")
+                     for v, c in color.items()]
+    style_handles = [mlines.Line2D([], [], color="grey", label=f"{cfg.style_var} = {v}", linestyle=ls)
+                     for v, ls in style.items()]
+    fig.legend(handles=color_handles, title="Colors", loc="upper left")
+    fig.legend(handles=style_handles, title="Lines", loc="upper right")
 
-    Legend_1_height = bbox.height
-
-
-    Legend_2 = plt.legend(
-        handles=line_handles,
-        title="Lines",
-        ncol=1,
-        loc="upper left",
-        bbox_to_anchor=(0.02, 0.95 - Legend_1_height*1.5),
-    )
-
-
-    plt.grid(True)
-
-    plt.tight_layout()
-
-    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\OD.svg", transparent=True, format="svg")
-    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\OD.png", transparent=None, format="png", dpi=600)
-    plt.show()
+    return fig
 
 
 
+# ---------------------------------------------------------
+# Show and save Plot (should be insude the plotting function?)
+# ---------------------------------------------------------
 
+if __name__ == "__main__":
 
-def plot_mu(plot_subset):
-    """
-    Plot mean ± standard error for each condition.
-    """
+    od_cfg = default_config(summary_df)
+    mu_cfg = default_config(summary_df, y_mean= "mu_mean", y_se="mu_se", ylabel="mu[h^-1]")
 
-    fig = plt.figure(figsize=(10, 6))
+    od_fig = plot_mean_metric(summary_df, od_cfg)
+    od_fig.tight_layout()
+    od_fig.savefig(BASE / "Plots" / "OD.svg", transparent=True, format="svg")
+    od_fig.savefig(BASE / "Plots" / "OD.png", transparent=False, format="png", dpi=600)
 
-    for condition in plot_subset["condition"].unique():
-
-        imidazole_conc = plot_subset.loc[plot_subset["condition"] == condition, "imidazole (g/L)"].to_numpy()[0]
-        OD600_value = plot_subset.loc[plot_subset["condition"] == condition, "start OD"].to_numpy()[0]
-
-        condition_data = plot_subset[
-            plot_subset["condition"] == condition
-        ].sort_values("Time [s]")
-
-        condition_data = condition_data.dropna(
-            subset=["Time [s]", "mu_mean", "mu_ci"]
-        )
-
-        if len(condition_data) == 0:
-            continue
-
-        time =  pd.to_numeric(condition_data["Time [s]"], errors="coerce") / 3600
-        mean = pd.to_numeric(condition_data["mu_mean"], errors="coerce")
-        se = pd.to_numeric(condition_data["mu_se"], errors="coerce").fillna(0)
-
-        plt.plot(
-            time,
-            mean,
-            linestyle=imi_linestyle_dict[imidazole_conc],
-            linewidth=3,
-            color=OD_color_dict[OD600_value],
-            label=condition,
-        )
-
-        plt.fill_between(
-            time,
-            mean - se,
-            mean + se,
-            color=OD_color_dict[OD600_value],
-            alpha=0.2
-        )
-
-
-
-    processed_files = []
-    for item in metadata_df["Filename"].unique():
-        processed_files.append(item)
-        processed_files.append("\n")
-    titlestring = ''.join(processed_files)
-
-
-
-    plt.xlabel("Time [h]")
-    plt.ylabel(f"growth rate [h{{$^-1$}}]")
-    plt.title(f"Processed files: \n {titlestring}") #storing data complicates the falename issue
-
-    color_handles = [mlines.Line2D(
-        [],
-        [],
-        color=OD_color_dict[OD600_value],
-        label=f"start OD600 = {OD600_value}",
-        linestyle="-"
-    )
-    for OD600_value in OD_plot]
-
-    line_handles = [mlines.Line2D(
-        [],
-        [],
-        color="grey",
-        label=f"imidazole [g/L] = {imidazole_conc}",
-        linestyle=imi_linestyle_dict[imidazole_conc],
-    )
-    for imidazole_conc in imidazol_plot]
-
-    Legend_1 = plt.legend(
-        handles=color_handles,
-        title="Colors",
-        ncol=1,
-        loc="upper left",
-        bbox_to_anchor=(0.02, 0.95),
-    )
-    plt.gca().add_artist(Legend_1)
-
-    # Force Matplotlib to calc. dimensions of the Leend
-    fig.canvas.draw()
-
-    #Get width of Legend_1 in coordinates of the figure
-    bbox = Legend_1.get_window_extent()
-    bbox = bbox.transformed(fig.transFigure.inverted())
-
-    Legend_1_height = bbox.height
-
-
-    Legend_2 = plt.legend(
-        handles=line_handles,
-        title="Lines",
-        ncol=1,
-        loc="upper left",
-        bbox_to_anchor=(0.02, 0.95 - Legend_1_height*1.5),
-    )
-
-
-    plt.grid(True)
-
-    plt.tight_layout()
-
-    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\mu.svg", transparent=True, format="svg")
-    plt.savefig(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Plots\mu.png", transparent=None, format="png", dpi=600)
-    plt.show()
-
-
-plot_OD(plot_subset)
-plot_mu(plot_subset)
+    mu_fig = plot_mean_metric(summary_df, mu_cfg)
+    mu_fig.tight_layout()
+    mu_fig.savefig(BASE / "Plots" / "mu.svg", transparent=True, format="svg")
+    mu_fig.savefig(BASE / "Plots" / "mu.png", transparent=False, format="png", dpi=600)
+ #   plt.show() # only turn on for directly running the script, not required in streamlit 
