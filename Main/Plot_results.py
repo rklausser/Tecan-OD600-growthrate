@@ -41,6 +41,7 @@ class PlotConfig:
     ylabel: str = "OD600"       # unspecific definition of the y-data so one function can plot both OD and mu
     ncol: int = 3               # sets max. columns of the panel before they wrap
     filters: dict[str, list] = field(default_factory=dict) # empty produced no filter
+    share_y: bool = True        # True: all facet panels share the same y-scale (global min/max)
     
 
 
@@ -75,9 +76,9 @@ def default_config(df, y_mean="OD_mean", y_se="OD_se", ylabel="OD600", **kwargs)
     params = parameter_columns(df)
     cfg = PlotConfig(y_mean=y_mean, y_se=y_se, ylabel=ylabel, **kwargs)
     if params:
-        cfg.color_var = params[0]
+        cfg.color_var = params[1]
     if len(params) > 1:
-        cfg.style_var = params[1]
+        cfg.style_var = params[4]
     return cfg
 
 def apply_filters(df, filters):
@@ -105,11 +106,21 @@ def plot_mean_metric(df, cfg):
         ncol, nrow = 1, 1 # when nothing is in combos, there is no need to wrap so it becomes a single panel
         # Note: Input fields are tricky in terms of safety, so ncol should be selected in the config via a spinner or something like that
 
-    fig, axes = plt.subplots(nrow, ncol, squeeze=False, figsize=(10, 6))
-    axes = axes.ravel()
+    # One extra column on the right is reserved for the legends so they never
+    # overlap the plot or get clipped by the figure edge.
+    fig = plt.figure(figsize=(12, 6))
+    grid = fig.add_gridspec(nrow, ncol + 1, width_ratios=[1] * ncol + [0.2])
+    axes = [fig.add_subplot(grid[i, j]) for i in range(nrow) for j in range(ncol)]
+    legend_ax = fig.add_subplot(grid[:, ncol])
+    legend_ax.axis("off")
 
     # Filter the data for each panel of the facets, only lets values for the respective variables through
+    ymin, ymax = None, None  # global y-extent used when share_y is enabled
     for ax, combo in zip(axes, combos):
+        title = ", ".join(f"{v} = {val}" for v, val in zip(cfg.facet_vars, combo))
+        if title:
+            ax.set_title(title)
+
         panel = df
         for var, val in zip(cfg.facet_vars, combo):
             panel = panel[panel[var] == val]
@@ -129,14 +140,28 @@ def plot_mean_metric(df, cfg):
 
                 ax.set_xlabel("Time [h]"); ax.set_ylabel(cfg.ylabel); ax.grid(True)
 
+                if cfg.share_y:
+                    lo = float((y - se).min())
+                    hi = float((y + se).max())
+                    ymin = lo if ymin is None else min(ymin, lo)
+                    ymax = hi if ymax is None else max(ymax, hi)
+
+    if cfg.share_y and ymin is not None:
+        for ax in axes:
+            ax.set_ylim(ymin, ymax)
+
 # Generate the legend handles - this might need some more work?
 
     color_handles = [mlines.Line2D([], [], color=c, label=f"{cfg.color_var} = {v}", linestyle="-")
                      for v, c in color.items()]
     style_handles = [mlines.Line2D([], [], color="grey", label=f"{cfg.style_var} = {v}", linestyle=ls)
                      for v, ls in style.items()]
-    fig.legend(handles=color_handles, title="Colors", loc="upper left")
-    fig.legend(handles=style_handles, title="Lines", loc="upper right")
+    # Place both legends inside the dedicated right-hand axes so the layout stays
+    # intact even after tight_layout().
+    legend_ax.add_artist(legend_ax.legend(
+        handles=color_handles, title="Colors", loc="upper left", borderaxespad=0))
+    legend_ax.add_artist(legend_ax.legend(
+        handles=style_handles, title="Lines", loc="lower left", borderaxespad=0))
 
     return fig
 
@@ -151,6 +176,10 @@ if __name__ == "__main__":
     od_cfg = default_config(summary_df)
     mu_cfg = default_config(summary_df, y_mean= "mu_mean", y_se="mu_se", ylabel="mu[h^-1]")
 
+    od_cfg.color_var = "(NH4)2SO4 (g/L)"
+    od_cfg.style_var = "Glucose (g/L)"
+    #od_cfg.facet_vars = ["imidazole (g/L)", "start OD"]
+
     od_fig = plot_mean_metric(summary_df, od_cfg)
     od_fig.tight_layout()
     od_fig.savefig(BASE / "Plots" / "OD.svg", transparent=True, format="svg")
@@ -160,4 +189,4 @@ if __name__ == "__main__":
     mu_fig.tight_layout()
     mu_fig.savefig(BASE / "Plots" / "mu.svg", transparent=True, format="svg")
     mu_fig.savefig(BASE / "Plots" / "mu.png", transparent=False, format="png", dpi=600)
- #   plt.show() # only turn on for directly running the script, not required in streamlit 
+    plt.show() # only turn on for directly running the script, not required in streamlit 
