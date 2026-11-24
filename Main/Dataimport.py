@@ -2,7 +2,7 @@
 import pandas as pd
 from pathlib import Path
 
-#define import directory
+#define import directory (only used when running this file directly)
 directory = Path(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Test_Dataset")
 
 #import meta-data function
@@ -203,18 +203,20 @@ def concatenate_tecan_files(
 
     return combined_data, combined_metadata
 
-filepaths = []
-for file in directory.glob("*.xlsx"):
-    filepaths.append(Path(file))
+if __name__ == "__main__":
 
-data_df, metadata_df = concatenate_tecan_files(
-    filepaths,
-    start_time_parameter="Start Time"
-)
+    filepaths = []
+    for file in directory.glob("*.xlsx"):
+        filepaths.append(Path(file))
 
-print(data_df.to_string(index=False))
-print(metadata_df.to_string(index=False))
+    data_df, metadata_df = concatenate_tecan_files(
+        filepaths,
+        start_time_parameter="Start Time"
+    )
 
-data_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_data_df.parquet") # save data to parquet
-metadata_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_meta_df.parquet") # save metadata to parquet
+    print(data_df.to_string(index=False))
+    print(metadata_df.to_string(index=False))
+
+    data_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_data_df.parquet") # save data to parquet
+    metadata_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp/tecan_import_meta_df.parquet") # save metadata to parquet
 

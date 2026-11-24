@@ -7,10 +7,8 @@ from math import ceil
 from pathlib import Path
 
 # --------------------------
-# file import
+# file import (only when running this file directly)
 # --------------------------
-
-summary_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\summary_df.parquet")
 
 #Metadata import is not used at the moment. Can be reactivated later
 #metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
@@ -107,9 +105,11 @@ def plot_mean_metric(df, cfg):
         # Note: Input fields are tricky in terms of safety, so ncol should be selected in the config via a spinner or something like that
 
     # One extra column on the right is reserved for the legends so they never
-    # overlap the plot or get clipped by the figure edge.
+    # overlap the plot or get clipped by the figure edge. Its width scales with
+    # the number of panels so it always stays broad enough for the legend text.
     fig = plt.figure(figsize=(12, 6))
-    grid = fig.add_gridspec(nrow, ncol + 1, width_ratios=[1] * ncol + [0.2])
+    legend_ratio = 0.4 * ncol  # keeps the legend column ~28% of the figure width
+    grid = fig.add_gridspec(nrow, ncol + 1, width_ratios=[1] * ncol + [legend_ratio])
     axes = [fig.add_subplot(grid[i, j]) for i in range(nrow) for j in range(ncol)]
     legend_ax = fig.add_subplot(grid[:, ncol])
     legend_ax.axis("off")
@@ -172,6 +172,8 @@ def plot_mean_metric(df, cfg):
 # ---------------------------------------------------------
 
 if __name__ == "__main__":
+
+    summary_df = pd.read_parquet(BASE / "Temp" / "summary_df.parquet")
 
     od_cfg = default_config(summary_df)
     mu_cfg = default_config(summary_df, y_mean= "mu_mean", y_se="mu_se", ylabel="mu[h^-1]")

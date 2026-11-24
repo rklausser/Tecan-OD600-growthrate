@@ -2,83 +2,82 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 from scipy.signal import savgol_filter
+from pathlib import Path
 
 
 # --------------------------
-# file import
+# constants and helpers
 # --------------------------
 
-data_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_data_df.parquet")
-metadata_df = pd.read_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\tecan_import_meta_df.parquet")
+# Standard wells on the GRE24ft (24 well) plate used here: A1->D6
+WELL_ROWS = "ABCD"
+WELL_COLUMNS = [f"{row}{col}" for row in WELL_ROWS for col in range(1, 7)]
 
-well_assignment_path = r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Well_assignment\assignment_sheet.xlsx"
 
-# --------------------------
-# identify time column
-# --------------------------
+def find_time_column(data_df):
+    """Return the single column that holds time, raising if ambiguous."""
+    time_columns = [c for c in data_df.columns if "Time" in str(c)]
 
-time_columns = [
-    column
-    for column in data_df.columns
-    if "Time" in str(column)
-]
+    if len(time_columns) == 0:
+        raise ValueError("No time columns found")
 
-if len(time_columns) == 0:
-    raise ValueError("No time columns found")
+    if len(time_columns) > 1:
+        raise ValueError(
+            f"Multiple time columns found: {time_columns}; only 1 time column allowed"
+        )
 
-if len(time_columns) > 1:
-    raise ValueError(
-        f"Multiple time columns found: {time_columns}; only 1 time column allowed"
-    )
+    return time_columns[0]
 
-time_column = time_columns[0]
 
-# --------------------------
-# identify wells
-# --------------------------
+def check_well_columns(data_df, well_columns=WELL_COLUMNS):
+    """Raise if any expected well column is missing from the data."""
+    missing_wells = [w for w in well_columns if w not in data_df.columns]
 
-well_columns = [
-    f"{row}{column}"
-    for row in "ABCD"
-    for column in range(1, 7)
-]
+    if missing_wells:
+        raise ValueError(f"Missing well columns: {missing_wells}")
 
-# Check that all expected wells exist
-missing_wells = [
-    well
-    for well in well_columns
-    if well not in data_df.columns
-]
+    return well_columns
 
-if missing_wells:
-    raise ValueError(
-        f"Missing well columns: {missing_wells}"
-    )
 
-# ---------------------------------------------------------
-# well assignment
-# ---------------------------------------------------------
+def read_well_assignments(assignment_df):
+    """
+    Convert a well assignment DataFrame into a dict of well -> {column: value}.
 
-#read well assignment sheet
-meta = pd.read_excel(well_assignment_path)
+    Parameters
+    ----------
+    assignment_df : pandas.DataFrame
+        Must contain at least the columns 'well', 'condition' and 'replicate'.
+        Any additional columns are treated as extra experimental parameters.
 
-#check if required information is existing
-required = ["well", "condition", "replicate"]
-missing = [c for c in required if c not in meta.columns]
-if missing:
-    raise ValueError(f"Missing required columns: {missing}")
+    Returns
+    -------
+    well_assignments : dict
+        Mapping of well name to a dict of its parameters (replicate + extras).
+    """
+    required = ["well", "condition", "replicate"]
+    missing = [c for c in required if c not in assignment_df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
 
-#make sure that replicates are integers
-meta["replicate"] = meta["replicate"].astype(int)
+    meta = assignment_df.copy()
+    #make sure that replicates are integers
+    meta["replicate"] = meta["replicate"].astype(int)
 
-well_assignments = {
-    row["well"]: {
-        col: row[col]
-        for col in meta.columns
-        if col != "well"
+    well_assignments = {
+        row["well"]: {
+            col: row[col]
+            for col in meta.columns
+            if col != "well"
+        }
+        for _, row in meta.iterrows()
     }
-    for _, row in meta.iterrows()
-}
+
+    return well_assignments
+
+
+# ---------------------------------------------------------
+# well assignment validation
+# ---------------------------------------------------------
 
 def validate_assignments(data_df, well_assignments):
     """
@@ -172,19 +171,7 @@ def assign_conditions(data_df, well_assignments):
     well_columns = list(well_assignments.keys())
 
     # Find the time column
-    time_columns = [
-        column
-        for column in data_df.columns
-        if "Time" in str(column)
-    ]
-
-    if len(time_columns) != 1:
-        raise ValueError(
-            f"Expected exactly one time column, "
-            f"found: {time_columns}"
-        )
-
-    time_column = time_columns[0]
+    time_column = find_time_column(data_df)
 
     # Convert wide → long
     long_df = data_df.melt(
@@ -212,11 +199,6 @@ def assign_conditions(data_df, well_assignments):
     )
 
     return long_df
-
-
-long_df = assign_conditions(data_df, well_assignments)
-# print(long_df) #optional diagnostic
-long_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\long_df.parquet") # save data to parquet
 
 
 # ---------------------------------------------------------
@@ -320,14 +302,6 @@ def remove_spikes(long_df, window=5, threshold=2):
     return filtered_df
 
 
-
-filtered_df = remove_spikes(
-    long_df,
-    window=20,
-    threshold=2
-)
-filtered_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\filtered_df.parquet") # save data to parquet
-
 # --------------------------
 # Define Smoothing function (Savitzki-Golay)
 # --------------------------
@@ -345,16 +319,6 @@ def smooth_with_savgol(group, window_length=11, polyorder=2):
 
     return group
 
-# Apply savgol filter to each well separately
-
-
-smoothed_df = (
-    filtered_df
-    .groupby("well", group_keys=False)
-    .apply(smooth_with_savgol)
-)
-
-smoothed_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\smoothed_df.parquet") # save smoothed df
 
 def calculate_growthrate(group):
     """
@@ -388,22 +352,12 @@ def calculate_growthrate(group):
 
     return group
 
-mu_df = (
-    smoothed_df
-    .groupby(["well"], group_keys=False)
-    .apply(calculate_growthrate)
-)
-
-# Optional diagnostics
-
-#print(smoothed_df.head())
-#print(mu_df.head())
 
 # ---------------------------------------------------------
 # calculate summary of OD ( mean and se) before plotting
 # ---------------------------------------------------------
 
-def calculate_summary(mu_df, OD_column, mu_column):
+def calculate_summary(mu_df, OD_column, mu_column, well_assignments):
     """
     Calculate mean, standard deviation, number of replicates,
     and standard error for each condition and time point.
@@ -454,6 +408,86 @@ def calculate_summary(mu_df, OD_column, mu_column):
 
     return summary_df
 
-summary_df = calculate_summary(mu_df, OD_column = "Y Data smoothed", mu_column = "mu")
-print(summary_df.head()) #optional diagnostic
-summary_df.to_parquet(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main\Temp\summary_df.parquet")
+
+# ---------------------------------------------------------
+# full pipeline: combined TECAN data -> processed summary
+# ---------------------------------------------------------
+
+def process_tecans(data_df, metadata_df, assignment_df, **kwargs):
+    """
+    Run the whole Dataprocessing pipeline on imported TECAN data.
+
+    Parameters
+    ----------
+    data_df : pandas.DataFrame
+        Combined wide-format TECAN data (from Dataimport.concatenate_tecan_files).
+
+    metadata_df : pandas.DataFrame
+        Combined TECAN metadata (only used for logging/consistency).
+
+    assignment_df : pandas.DataFrame
+        Well assignment sheet (columns: well, condition, replicate + extras).
+
+    Returns
+    -------
+    summary_df : pandas.DataFrame
+        Summarised mean / se / growth-rate data ready for Plot_results.
+    """
+    check_well_columns(data_df)
+
+    # The TECAN import can leave the time column as object dtype; coerce it to
+    # a numeric value so the growth-rate math below is safe (and reproducible).
+    time_column = find_time_column(data_df)
+    data_df = data_df.copy()
+    data_df[time_column] = pd.to_numeric(data_df[time_column], errors="coerce")
+
+    well_assignments = read_well_assignments(assignment_df)
+
+    long_df = assign_conditions(data_df, well_assignments)
+
+    filtered_df = remove_spikes(
+        long_df,
+        window=kwargs.get("window", 20),
+        threshold=kwargs.get("threshold", 2)
+    )
+
+    smoothed_df = (
+        filtered_df
+        .groupby("well", group_keys=False)
+        .apply(smooth_with_savgol)
+        .sort_index()  # restore original row order (apply can reorder groups)
+    )
+
+    # Newer pandas (>= 3.0) drops the grouping column from the apply output.
+    # Re-attach it (index-aligned) so the next groupby on "well" keeps working.
+    if "well" not in smoothed_df.columns:
+        smoothed_df["well"] = filtered_df["well"]
+
+    mu_df = (
+        smoothed_df
+        .groupby(["well"], group_keys=False)
+        .apply(calculate_growthrate)
+    )
+
+    summary_df = calculate_summary(
+        mu_df,
+        OD_column="Y Data smoothed",
+        mu_column="mu",
+        well_assignments=well_assignments,
+    )
+
+    return summary_df
+
+
+if __name__ == "__main__":
+
+    BASE = Path(r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Main")
+    data_df = pd.read_parquet(BASE / "Temp" / "tecan_import_data_df.parquet")
+    metadata_df = pd.read_parquet(BASE / "Temp" / "tecan_import_meta_df.parquet")
+    assignment_df = pd.read_excel(
+        r"C:\Users\rklausser\Programming\20261109_Pseudomonas_OD\Tecan-OD600-growthrate\Well_assignment\assignment_sheet.xlsx"
+    )
+
+    summary_df = process_tecans(data_df, metadata_df, assignment_df)
+    print(summary_df.head()) #optional diagnostic
+    summary_df.to_parquet(BASE / "Temp" / "summary_df.parquet")
